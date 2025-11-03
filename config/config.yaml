@@ -1,0 +1,146 @@
+# HyperLiquid AI Trading Bot Configuration
+
+# HyperLiquid API Configuration
+hyperliquid:
+  # API URL (mainnet or testnet)
+  api_url: "https://api.hyperliquid-testnet.xyz"  # 使用测试网进行开发
+  # Your wallet address (42-character hexadecimal format)
+  account_address: ""  # 需要填入您的钱包地址
+  # Your private key (keep this secret!)
+  secret_key: ""  # 需要填入您的私钥
+  # Use API wallet (optional)
+  use_api_wallet: false
+
+# Deepseek API Configuration
+deepseek:
+  # API URL
+  api_url: "https://api.deepseek.com"
+  # Your Deepseek API key
+  api_key: ""  # 需要填入您的Deepseek API密钥
+  # Model to use
+  model: "deepseek-chat"  # 可选: deepseek-chat, deepseek-reasoner
+  # Max tokens for response
+  max_tokens: 2000
+  # Temperature (0-2)
+  temperature: 0.7
+
+# Trading Configuration
+trading:
+  # Trading pairs to monitor (top 10 coins)
+  trading_pairs:
+    - "BTC"
+    - "ETH"
+    - "SOL"
+    - "DOGE"
+    - "XRP"
+    - "ADA"
+    - "AVAX"
+    - "LINK"
+    - "MATIC"
+    - "DOT"
+  
+  # Trading mode
+  mode: "paper"  # paper: 模拟交易, live: 实盘交易
+  
+  # Initial capital (for paper trading)
+  initial_capital: 10000  # USD
+  
+  # Trading interval (seconds)
+  trading_interval: 60  # 每60秒执行一次交易决策
+  
+  # Order types
+  default_order_type: "limit"  # limit, market
+  
+  # Time in force
+  default_tif: "Gtc"  # Gtc, Ioc, Alo
+
+# Risk Management Configuration
+risk:
+  # Maximum position size per coin (% of total capital)
+  max_position_per_coin: 0.20  # 20%
+  
+  # Maximum total position (% of total capital)
+  max_total_position: 0.80  # 80%
+  
+  # Default leverage
+  default_leverage: 3
+  
+  # Maximum leverage
+  max_leverage: 5
+  
+  # Stop loss percentage
+  stop_loss_pct: 0.05  # 5%
+  
+  # Take profit percentage
+  take_profit_pct: 0.10  # 10%
+  
+  # Maximum drawdown threshold
+  max_drawdown: 0.20  # 20%
+  
+  # Maximum daily loss
+  max_daily_loss: 0.10  # 10%
+
+# Strategy Configuration
+strategy:
+  # Strategy type
+  type: "ai_hybrid"  # ai_hybrid, trend_following, mean_reversion
+  
+  # Technical indicators to use
+  indicators:
+    - "SMA"
+    - "EMA"
+    - "RSI"
+    - "MACD"
+    - "BBANDS"
+    - "VOLUME"
+  
+  # Indicator parameters
+  sma_period: 20
+  ema_period: 12
+  rsi_period: 14
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  bbands_period: 20
+  bbands_std: 2
+
+# Data Configuration
+data:
+  # Historical data lookback period (days)
+  lookback_days: 30
+  
+  # Candle interval
+  candle_interval: "1m"  # 1m, 5m, 15m, 1h, 4h, 1d
+  
+  # Cache enabled
+  cache_enabled: true
+  
+  # Cache expiry (seconds)
+  cache_expiry: 300  # 5 minutes
+
+# Logging Configuration
+logging:
+  # Log level
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  
+  # Log to file
+  log_to_file: true
+  
+  # Log file path
+  log_file: "logs/trading_bot.log"
+  
+  # Log rotation
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+
+# Monitoring Configuration
+monitoring:
+  # Enable monitoring
+  enabled: true
+  
+  # Performance metrics update interval (seconds)
+  metrics_interval: 300  # 5 minutes
+  
+  # Alert thresholds
+  alert_on_error: true
+  alert_on_drawdown: true

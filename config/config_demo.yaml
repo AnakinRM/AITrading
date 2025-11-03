@@ -1,0 +1,58 @@
+# Demo Configuration for Paper Trading
+# Initial Capital: $10,000
+
+hyperliquid:
+  api_url: "https://api.hyperliquid-testnet.xyz"
+  account_address: ""  # Not needed for paper trading
+  secret_key: ""       # Not needed for paper trading
+
+deepseek:
+  api_key: ""  # Will use environment variable if available
+  api_url: "https://api.deepseek.com"
+  model: "deepseek-chat"
+  max_tokens: 2000
+  temperature: 0.7
+
+trading:
+  # Top 10 coins for trading
+  trading_pairs:
+    - "BTC"
+    - "ETH"
+    - "SOL"
+    - "ARB"
+    - "AVAX"
+  
+  mode: "paper"  # Paper trading mode
+  initial_capital: 10000  # $10,000 initial capital
+  trading_interval: 300  # 5 minutes between decisions (faster for demo)
+
+risk:
+  max_position_per_coin: 0.20  # 20% per coin
+  max_total_position: 0.80     # 80% total
+  default_leverage: 3
+  max_leverage: 5
+  stop_loss_pct: 0.05          # 5% stop loss
+  take_profit_pct: 0.10        # 10% take profit
+  max_drawdown: 0.20           # 20% max drawdown
+  max_daily_loss: 0.10         # 10% daily loss limit
+
+strategy:
+  type: "ai_hybrid"
+  indicators:
+    sma_period: 20
+    ema_period: 12
+    rsi_period: 14
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    bbands_period: 20
+    bbands_std: 2
+    atr_period: 14
+
+data:
+  cache_expiry: 300  # 5 minutes cache
+
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/demo_trading.log"
