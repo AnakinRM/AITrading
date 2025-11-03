@@ -36,8 +36,8 @@ env/
 logs/
 *.log
 
-# Data
-data/
+# Data (exclude data directory but not src/data)
+/data/
 *.csv
 *.db
 *.sqlite
