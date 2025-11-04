@@ -93,10 +93,10 @@ class MarketDataCollector:
                 start_time = end_time - (24 * 60 * 60 * 1000)
             
             candles = self.info.candles_snapshot(
-                coin=coin,
-                interval=interval,
-                startTime=start_time,
-                endTime=end_time
+                coin,
+                interval,
+                start_time,
+                end_time
             )
             
             if not candles:

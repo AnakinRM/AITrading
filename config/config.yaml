@@ -16,7 +16,7 @@ deepseek:
   # API URL
   api_url: "https://api.deepseek.com"
   # Your Deepseek API key
-  api_key: ""  # 需要填入您的Deepseek API密钥
+  api_key: "your_deepseek_api_key_here"  # 需要填入您的Deepseek API密钥
   # Model to use
   model: "deepseek-chat"  # 可选: deepseek-chat, deepseek-reasoner
   # Max tokens for response

@@ -7,7 +7,7 @@ hyperliquid:
   secret_key: ""       # Not needed for paper trading
 
 deepseek:
-  api_key: ""  # Will use environment variable if available
+  api_key: "your_deepseek_api_key_here"  # Will use environment variable if available
   api_url: "https://api.deepseek.com"
   model: "deepseek-chat"
   max_tokens: 2000

@@ -29,6 +29,8 @@ class RiskManager:
         self.max_total_position = config.get('max_total_position', 0.80)
         self.default_leverage = config.get('default_leverage', 3)
         self.max_leverage = config.get('max_leverage', 5)
+        if self.max_leverage in (None, 0):
+            self.max_leverage = float('inf')
         self.stop_loss_pct = config.get('stop_loss_pct', 0.05)
         self.take_profit_pct = config.get('take_profit_pct', 0.10)
         self.max_drawdown = config.get('max_drawdown', 0.20)
@@ -223,7 +225,7 @@ class RiskManager:
             return False, "Trading is currently disabled due to risk limits"
         
         # Check leverage
-        if leverage > self.max_leverage:
+        if self.max_leverage != float('inf') and leverage > self.max_leverage:
             return False, f"Leverage {leverage}x exceeds maximum {self.max_leverage}x"
         
         # Calculate position value
