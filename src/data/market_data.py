@@ -10,6 +10,7 @@ from hyperliquid.utils import constants
 
 from ..utils.logger import get_logger
 from ..utils.config_loader import get_config
+from ..utils.constants import ALLOWED_SYMBOLS, LOG_SKIP_UNAVAILABLE, LOG_PRICE_FETCH_FAILED
 
 
 class MarketDataCollector:
@@ -31,7 +32,11 @@ class MarketDataCollector:
         self.api_url = config.get('api_url', constants.MAINNET_API_URL)
         self.info = Info(self.api_url, skip_ws=True)
         
+        # Whitelist of allowed trading symbols
+        self.allowed_symbols = ALLOWED_SYMBOLS
+        
         self.logger.info(f"MarketDataCollector initialized with API: {self.api_url}")
+        self.logger.info(f"Allowed trading symbols: {self.allowed_symbols}")
     
     def get_all_mids(self) -> Dict[str, float]:
         """
@@ -218,6 +223,135 @@ class MarketDataCollector:
         except Exception as e:
             self.logger.error(f"Error getting funding history for {coin}: {e}")
             return []
+    
+    def get_available_symbols(self) -> List[str]:
+        """
+        Get list of symbols that are currently available for trading
+        Filters by ALLOWED_SYMBOLS whitelist and checks availability on Hyperliquid
+        
+        Returns:
+            List of available symbol strings
+        """
+        available = []
+        all_mids = self.get_all_mids()
+        
+        for symbol in self.allowed_symbols:
+            if symbol in all_mids and all_mids[symbol] is not None and all_mids[symbol] > 0:
+                available.append(symbol)
+                self.logger.debug(f"Symbol {symbol} is available: ${all_mids[symbol]}")
+            else:
+                self.logger.warning(
+                    f"{LOG_SKIP_UNAVAILABLE}={symbol} - Symbol not available or no price data",
+                    extra={"event": LOG_SKIP_UNAVAILABLE, "symbol": symbol}
+                )
+        
+        self.logger.info(f"Available symbols: {available} (out of {len(self.allowed_symbols)} allowed)")
+        return available
+    
+    def get_price_safe(self, symbol: str) -> Optional[float]:
+        """
+        Safely get price for a symbol with error handling
+        Returns None if symbol is not available or price fetch fails
+        
+        Args:
+            symbol: Symbol to get price for
+        
+        Returns:
+            Price as float or None if unavailable
+        """
+        # Check if symbol is in whitelist
+        if symbol not in self.allowed_symbols:
+            self.logger.warning(
+                f"Symbol {symbol} not in allowed list: {self.allowed_symbols}",
+                extra={"event": "symbol_not_allowed", "symbol": symbol}
+            )
+            return None
+        
+        try:
+            all_mids = self.get_all_mids()
+            
+            if symbol not in all_mids:
+                self.logger.warning(
+                    f"{LOG_SKIP_UNAVAILABLE}={symbol} - Symbol not found in market data",
+                    extra={"event": LOG_SKIP_UNAVAILABLE, "symbol": symbol}
+                )
+                return None
+            
+            price = all_mids[symbol]
+            
+            if price is None or price <= 0:
+                self.logger.warning(
+                    f"{LOG_PRICE_FETCH_FAILED}={symbol} - Invalid price: {price}",
+                    extra={"event": LOG_PRICE_FETCH_FAILED, "symbol": symbol, "price": price}
+                )
+                return None
+            
+            return float(price)
+            
+        except Exception as e:
+            self.logger.error(
+                f"{LOG_PRICE_FETCH_FAILED}={symbol} - Exception: {e}",
+                extra={"event": LOG_PRICE_FETCH_FAILED, "symbol": symbol, "error": str(e)}
+            )
+            return None
+    
+    def get_market_data_for_symbols(self, symbols: List[str] = None) -> Dict[str, Dict[str, Any]]:
+        """
+        Get market data for multiple symbols with error handling
+        Automatically skips unavailable symbols instead of failing
+        
+        Args:
+            symbols: List of symbols to fetch (defaults to allowed_symbols)
+        
+        Returns:
+            Dictionary mapping symbol -> market data
+            Only includes successfully fetched symbols
+        """
+        if symbols is None:
+            symbols = self.allowed_symbols
+        
+        market_data = {}
+        
+        for symbol in symbols:
+            try:
+                # Get price
+                price = self.get_price_safe(symbol)
+                if price is None:
+                    continue  # Skip this symbol
+                
+                # Get order book (optional, may fail)
+                l2_book = {}
+                try:
+                    l2_book = self.get_l2_book(symbol)
+                except Exception as e:
+                    self.logger.debug(f"Could not fetch L2 book for {symbol}: {e}")
+                
+                # Get recent candles (optional, may fail)
+                candles = pd.DataFrame()
+                try:
+                    candles = self.get_candles(symbol, interval="1h")
+                except Exception as e:
+                    self.logger.debug(f"Could not fetch candles for {symbol}: {e}")
+                
+                market_data[symbol] = {
+                    "symbol": symbol,
+                    "price": price,
+                    "l2_book": l2_book,
+                    "candles": candles,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                self.logger.debug(f"Successfully fetched market data for {symbol}")
+                
+            except Exception as e:
+                self.logger.warning(
+                    f"{LOG_SKIP_UNAVAILABLE}={symbol} - Failed to fetch market data: {e}",
+                    extra={"event": LOG_SKIP_UNAVAILABLE, "symbol": symbol, "error": str(e)}
+                )
+                continue  # Skip this symbol and continue with others
+        
+        self.logger.info(f"Fetched market data for {len(market_data)}/{len(symbols)} symbols")
+        return market_data
 
 
 class MarketDataCache:

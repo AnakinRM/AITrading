@@ -21,23 +21,20 @@ deepseek:
   model: "deepseek-chat"  # 可选: deepseek-chat, deepseek-reasoner
   # Max tokens for response
   max_tokens: 2000
-  # Temperature (0-2)
-  temperature: 0.7
+  # Temperature (0-2) - 1.0 recommended for data analysis
+  temperature: 1.0
 
 # Trading Configuration
 trading:
-  # Trading pairs to monitor (top 10 coins)
+  # Trading pairs to monitor (ALLOWED SYMBOLS ONLY)
+  # Only these 6 symbols are allowed for trading
   trading_pairs:
+    - "XRP"
+    - "DOGE"
     - "BTC"
     - "ETH"
     - "SOL"
-    - "DOGE"
-    - "XRP"
-    - "ADA"
-    - "AVAX"
-    - "LINK"
-    - "MATIC"
-    - "DOT"
+    - "BNB"
   
   # Trading mode
   mode: "paper"  # paper: 模拟交易, live: 实盘交易
@@ -65,8 +62,8 @@ risk:
   # Default leverage
   default_leverage: 3
   
-  # Maximum leverage
-  max_leverage: 5
+  # Maximum leverage (no artificial limit, use system default risk controls)
+  max_leverage: 20  # Increased from 5 to allow more flexibility
   
   # Stop loss percentage
   stop_loss_pct: 0.05  # 5%
