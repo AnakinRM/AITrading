@@ -70,6 +70,11 @@ class LiveTradingSystem:
         # AI dialog log file
         self.ai_dialog_log_path = Path(__file__).parent / "logs" / "ai_dialogs.log"
         self.ai_dialog_log_path.parent.mkdir(parents=True, exist_ok=True)
+        # Equity history log file
+        self.equity_log_path = Path(__file__).parent / "logs" / "equity_history.csv"
+        if not self.equity_log_path.exists():
+            header = "timestamp,capital,drawdown,num_positions,total_position_value\n"
+            self.equity_log_path.write_text(header, encoding="utf-8")
         
         # Initialize capital
         self.risk_manager.initialize_capital(initial_capital)
@@ -200,7 +205,10 @@ class LiveTradingSystem:
                 })
 
                 action = str(decision.get('action', '')).lower()
-                confidence = float(decision.get('confidence', 0))
+                try:
+                    confidence = float(decision.get('confidence', 0) or 0.0)
+                except (TypeError, ValueError):
+                    confidence = 0.0
                 self.logger.info(f"  {coin}: {action.upper()} (confidence {confidence:.2f})")
 
                 if action == 'buy':
@@ -392,6 +400,20 @@ class LiveTradingSystem:
             self.logger.debug("AI Response: %s", response_text)
         except Exception as exc:
             self.logger.error(f"Failed to write AI dialog log: {exc}")
+
+    def _record_equity_snapshot(self, metrics: Dict[str, Any]) -> None:
+        """Append a capital snapshot to CSV for charting."""
+        try:
+            with open(self.equity_log_path, "a", encoding="utf-8") as fp:
+                fp.write(
+                    f"{datetime.now().isoformat()},"
+                    f"{metrics.get('current_capital', 0)},"
+                    f"{metrics.get('drawdown', 0)},"
+                    f"{metrics.get('num_positions', 0)},"
+                    f"{metrics.get('total_position_value', 0)}\n"
+                )
+        except Exception as exc:
+            self.logger.error(f"Failed to persist equity snapshot: {exc}")
 
 
     def _get_ai_decisions(self, prices: Dict[str, float]) -> Dict[str, Dict[str, Any]]:
@@ -864,6 +886,8 @@ class LiveTradingSystem:
         """Generate hourly status report"""
         try:
             metrics = self.risk_manager.get_risk_metrics()
+            # Persist metrics for visualization before formatting output
+            self._record_equity_snapshot(metrics)
             current_capital = metrics['current_capital']
             return_pct = ((current_capital / self.initial_capital) - 1) * 100
             

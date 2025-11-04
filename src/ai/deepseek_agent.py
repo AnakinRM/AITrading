@@ -2,6 +2,8 @@
 Deepseek AI Agent for trading decisions
 """
 import json
+from pathlib import Path
+from datetime import datetime
 from typing import Dict, List, Optional, Any
 from openai import OpenAI
 
@@ -30,6 +32,11 @@ class DeepseekAgent:
         self.model = config.get('model', 'deepseek-chat')
         self.max_tokens = config.get('max_tokens', 2000)
         self.temperature = config.get('temperature', 0.7)
+        
+        # Dialog log file shared across components
+        project_root = Path(__file__).parent.parent.parent
+        self.dialog_log_path = project_root / "logs" / "ai_dialogs.log"
+        self.dialog_log_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Initialize OpenAI client (Deepseek is OpenAI-compatible)
         self.client = OpenAI(
@@ -84,10 +91,17 @@ class DeepseekAgent:
             # Parse response
             decision_text = response.choices[0].message.content
             decision = self._parse_decision(decision_text)
+            confidence = self._safe_float(decision.get('confidence', 0))
+            
+            self._log_dialog(
+                coin=coin,
+                prompt=prompt,
+                response_text=decision_text,
+            )
             
             self.logger.info(
                 f"AI decision for {coin}: {decision.get('action', 'HOLD')} "
-                f"(confidence: {decision.get('confidence', 0):.2f})"
+                f"(confidence: {confidence:.2f})"
             )
             
             return decision
@@ -133,33 +147,52 @@ Be conservative and prioritize capital preservation. Only recommend trades with 
     ) -> str:
         """Build analysis prompt from market data"""
         
+        price = self._safe_float(market_data.get('price', 0))
+        volume = self._safe_float(market_data.get('volume', 0))
+        sma = self._safe_float(technical_indicators.get('sma', 0))
+        ema = self._safe_float(technical_indicators.get('ema', 0))
+        rsi = self._safe_float(technical_indicators.get('rsi', 0))
+        macd = self._safe_float(technical_indicators.get('macd', 0))
+        macd_signal = self._safe_float(technical_indicators.get('macd_signal', 0))
+        bb_upper = self._safe_float(technical_indicators.get('bb_upper', 0))
+        bb_lower = self._safe_float(technical_indicators.get('bb_lower', 0))
+        atr = self._safe_float(technical_indicators.get('atr', 0))
+        rsi_signal = technical_indicators.get('rsi_signal', 'neutral')
+        macd_trend = technical_indicators.get('macd_signal', 'neutral')
+        trend = technical_indicators.get('trend', 'neutral')
+
         prompt = f"""Analyze the following market data for {coin} and provide a trading recommendation:
 
 ## Current Market Data
-- Current Price: ${market_data.get('price', 0):.2f}
-- 24h Volume: {market_data.get('volume', 0):.2f}
+- Current Price: ${price:.2f}
+- 24h Volume: {volume:.2f}
 
 ## Technical Indicators
-- SMA (20): ${technical_indicators.get('sma', 0):.2f}
-- EMA (12): ${technical_indicators.get('ema', 0):.2f}
-- RSI (14): {technical_indicators.get('rsi', 0):.2f} ({technical_indicators.get('rsi_signal', 'neutral')})
-- MACD: {technical_indicators.get('macd', 0):.4f}
-- MACD Signal: {technical_indicators.get('macd_signal', 0):.4f}
-- MACD Trend: {technical_indicators.get('macd_signal', 'neutral')}
-- Bollinger Upper: ${technical_indicators.get('bb_upper', 0):.2f}
-- Bollinger Lower: ${technical_indicators.get('bb_lower', 0):.2f}
-- ATR: ${technical_indicators.get('atr', 0):.2f}
-- Overall Trend: {technical_indicators.get('trend', 'neutral')}
+- SMA (20): ${sma:.2f}
+- EMA (12): ${ema:.2f}
+- RSI (14): {rsi:.2f} ({rsi_signal})
+- MACD: {macd:.4f}
+- MACD Signal: {macd_signal:.4f}
+- MACD Trend: {macd_trend}
+- Bollinger Upper: ${bb_upper:.2f}
+- Bollinger Lower: ${bb_lower:.2f}
+- ATR: ${atr:.2f}
+- Overall Trend: {trend}
 """
         
         if current_position:
+            entry_price = self._safe_float(current_position.get('entry_price', 0))
+            size = self._safe_float(current_position.get('size', 0))
+            leverage = self._safe_float(current_position.get('leverage', 1))
+            pnl_pct = self._safe_float(self._calculate_pnl(current_position, price))
+
             prompt += f"""
 ## Current Position
 - Side: {'LONG' if current_position.get('is_long') else 'SHORT'}
-- Size: {current_position.get('size', 0):.4f}
-- Entry Price: ${current_position.get('entry_price', 0):.2f}
-- Leverage: {current_position.get('leverage', 1)}x
-- Unrealized PnL: {self._calculate_pnl(current_position, market_data.get('price', 0)):.2f}%
+- Size: {size:.4f}
+- Entry Price: ${entry_price:.2f}
+- Leverage: {leverage:.2f}x
+- Unrealized PnL: {pnl_pct:.2f}%
 """
         else:
             prompt += "\n## Current Position\n- No open position\n"
@@ -168,6 +201,30 @@ Be conservative and prioritize capital preservation. Only recommend trades with 
 Based on this data, should I BUY, SELL, or HOLD? Provide your recommendation in the specified JSON format with detailed reasoning."""
         
         return prompt
+
+    def _log_dialog(self, coin: str, prompt: str, response_text: str) -> None:
+        """Persist Deepseek prompt/response to the shared log file."""
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "coin": coin,
+            "prompt": prompt,
+            "response": response_text,
+        }
+        try:
+            with open(self.dialog_log_path, "a", encoding="utf-8") as log_file:
+                log_file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception as exc:
+            self.logger.error(f"Failed to persist AI dialog: {exc}")
+
+    @staticmethod
+    def _safe_float(value: Any, default: float = 0.0) -> float:
+        """Best-effort conversion to float."""
+        try:
+            if value is None or value == "":
+                return float(default)
+            return float(value)
+        except (TypeError, ValueError):
+            return float(default)
     
     def _calculate_pnl(self, position: Dict[str, Any], current_price: float) -> float:
         """Calculate PnL percentage"""

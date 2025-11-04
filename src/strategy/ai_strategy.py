@@ -38,8 +38,52 @@ class AITradingStrategy:
         self.ai_agent = ai_agent
         self.risk_manager = risk_manager
         self.config = config or {}
+        self.indicator_params = self._build_indicator_params(self.config)
         
         self.logger.info("AITradingStrategy initialized")
+
+    @staticmethod
+    def _safe_float(value: Any, default: float = 0.0) -> float:
+        """Convert to float safely."""
+        try:
+            if value is None or value == "":
+                return float(default)
+            return float(value)
+        except (TypeError, ValueError):
+            return float(default)
+    
+    @staticmethod
+    def _build_indicator_params(config: Dict[str, Any]) -> Dict[str, int]:
+        """
+        Normalize indicator configuration into a dictionary with numeric values.
+        Supports both flat keys (sma_period, ema_period, ...) and nested
+        `indicator_params` dictionaries.
+        """
+        defaults = {
+            'sma_period': (20, int),
+            'ema_period': (12, int),
+            'rsi_period': (14, int),
+            'macd_fast': (12, int),
+            'macd_slow': (26, int),
+            'macd_signal': (9, int),
+            'bbands_period': (20, int),
+            'bbands_std': (2.0, float),
+            'atr_period': (14, int),
+        }
+        
+        # Prefer nested configuration if provided
+        source = config.get('indicator_params')
+        if not isinstance(source, dict) or not source:
+            source = config
+        
+        normalized = {}
+        for key, (default_value, caster) in defaults.items():
+            value = source.get(key, default_value)
+            try:
+                normalized[key] = caster(value)
+            except (TypeError, ValueError):
+                normalized[key] = default_value
+        return normalized
     
     def analyze_and_decide(
         self,
@@ -59,7 +103,7 @@ class AITradingStrategy:
         try:
             # Get current market data
             mids = self.market_data.get_all_mids()
-            current_price = mids.get(coin, 0)
+            current_price = self._safe_float(mids.get(coin, 0))
             
             if current_price == 0:
                 self.logger.warning(f"No price data for {coin}")
@@ -75,16 +119,21 @@ class AITradingStrategy:
             # Calculate technical indicators
             candles_with_indicators = self.indicators.calculate_all_indicators(
                 candles,
-                config=self.config.get('indicators', {})
+                config=self.indicator_params
             )
             
             # Get market summary
             market_summary = self.indicators.get_market_summary(candles_with_indicators)
+            market_summary['price'] = self._safe_float(market_summary.get('price', current_price))
+            market_summary['volume'] = self._safe_float(market_summary.get('volume', 0))
             
             # Get AI decision
             ai_decision = self.ai_agent.analyze_market(
                 coin=coin,
-                market_data={'price': current_price, 'volume': market_summary.get('volume', 0)},
+                market_data={
+                    'price': market_summary['price'],
+                    'volume': market_summary['volume']
+                },
                 technical_indicators=market_summary,
                 current_position=current_position
             )
@@ -120,8 +169,8 @@ class AITradingStrategy:
             Processed trading decision
         """
         action = ai_decision.get('action', 'hold')
-        confidence = ai_decision.get('confidence', 0)
-        leverage = ai_decision.get('leverage', 3)
+        confidence = self._safe_float(ai_decision.get('confidence', 0), default=0.0)
+        leverage = self._safe_int(ai_decision.get('leverage', 3), default=3, minimum=1)
         reasoning = ai_decision.get('reasoning', '')
         
         # Minimum confidence threshold
@@ -207,6 +256,23 @@ class AITradingStrategy:
             'reason': 'No clear signal',
             'ai_reasoning': reasoning
         }
+    
+    @staticmethod
+    def _safe_float(value: Any, default: float = 0.0) -> float:
+        """Convert a value to float safely."""
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+    
+    @staticmethod
+    def _safe_int(value: Any, default: int = 1, minimum: int = 1) -> int:
+        """Convert a value to int safely and enforce minimum."""
+        try:
+            number = int(float(value))
+        except (TypeError, ValueError):
+            number = default
+        return max(number, minimum)
     
     def backtest(
         self,
