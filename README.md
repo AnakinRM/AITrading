@@ -44,7 +44,7 @@
 - **Deepseek Chat模式** - 快速决策,适合高频交易(temperature=1.0优化)
 - **Deepseek Reasoner模式** - 深度推理,提供详细的决策解释
 - **上下文记忆** - AI记住所有历史交易和市场状态
-- **市场消息分析** - 整合新闻和市场情绪
+- **新闻集成** - 整合今天hourly news和过去7天daily summaries,提供更全面的市场洞察
 
 ### 📊 技术分析
 
@@ -59,6 +59,13 @@
 - **止损止盈** - 自动止损(默认10%)和止盈(默认20%)
 - **最大回撤限制** - 保护本金安全
 - **每日亏损限制** - 防止单日巨额亏损
+
+### 📰 新闻集成 (News Integration)
+
+- **实时新闻分析**: 系统现在能够自动获取、处理和分析最新的市场新闻。
+- **双重时间框架**: 结合**今天每小时新闻**和**过去7天每日摘要**, 为AI提供短期和中期的市场洞察。
+- **事件驱动交易**: AI现在可以将新闻事件作为交易决策的关键依据, 实现真正的事件驱动交易策略。
+- **结构化Prompt**: 优化的`nof1.ai`风格prompt将新闻分析置于首位, 引导AI优先考虑宏观和微观事件。
 
 ### ⚡ 交易执行
 
@@ -78,7 +85,11 @@ AITrading/
 │   │   ├── market_data.py # 市场数据采集
 │   │   └── indicators.py  # 技术指标计算
 │   ├── ai/                # AI决策引擎
-│   │   └── deepseek_agent.py
+│   │   ├── deepseek_agent.py
+│   │   └── deepseek_trading_agent.py
+│   ├── news/              # 新闻采集和分析
+│   │   ├── news_analyzer.py
+│   │   └── news_storage.py
 │   ├── strategy/          # 交易策略
 │   │   └── ai_strategy.py
 │   ├── trading/           # 交易执行
@@ -192,7 +203,11 @@ strategy:
   # AI决策
   confidence_threshold: 0.7       # 最低置信度阈值
   use_context_cache: true         # 启用上下文缓存
-  use_market_news: true           # 启用市场消息
+
+# 新闻集成配置
+news:
+  enabled: true                   # true=启用, false=禁用
+  news_data_dir: "news_data"      # 新闻数据存储目录
 
 # 系统配置
 system:
@@ -205,6 +220,23 @@ system:
 ---
 
 ## 📚 使用指南
+
+### 启用新闻集成功能
+
+要利用新闻驱动的交易决策, 请确保在`config/config.yaml`中启用新闻功能:
+
+```yaml
+news:
+  enabled: true
+```
+
+当`enabled: true`时, `DeepseekTradingAgent`会自动:
+1. 调用`NewsAnalyzer`获取格式化的新闻数据。
+2. 将新闻注入到发送给Deepseek模型的prompt中。
+3. AI将基于新闻和市场数据做出决策。
+
+如果设置为`false`, 系统将退回至仅依赖技术指标的模式。
+
 
 ### 纸上交易模式
 

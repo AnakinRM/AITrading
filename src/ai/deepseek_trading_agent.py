@@ -11,6 +11,7 @@ from openai import OpenAI
 from ..utils.logger import get_logger
 from ..utils.config_loader import get_config
 from ..utils.constants import ALLOWED_SYMBOLS, DIRECTION_LONG, DIRECTION_SHORT
+from ..news.news_analyzer import NewsAnalyzer
 
 
 class DeepseekTradingAgent:
@@ -19,12 +20,13 @@ class DeepseekTradingAgent:
     Inspired by nof1.ai Alpha Arena trading competition
     """
     
-    def __init__(self, config: dict = None):
+    def __init__(self, config: dict = None, news_analyzer: NewsAnalyzer = None):
         """
         Initialize Deepseek trading agent
         
         Args:
             config: Deepseek configuration dictionary
+            news_analyzer: NewsAnalyzer instance for news integration
         """
         self.logger = get_logger()
         
@@ -50,8 +52,13 @@ class DeepseekTradingAgent:
         # Context cache for historical decisions
         self.context_history = []
         
+        # News analyzer for news integration
+        self.news_analyzer = news_analyzer
+        
         self.logger.info(f"DeepseekTradingAgent initialized with model: {self.model}, temperature: {self.temperature}")
         self.logger.info(f"Allowed symbols: {ALLOWED_SYMBOLS}")
+        if self.news_analyzer:
+            self.logger.info("News integration enabled")
     
     def _load_orchestrator_prompt(self) -> str:
         """Load the orchestrator system prompt from file or use default"""
@@ -217,10 +224,22 @@ Before generating trading recommendations, you MUST:
         news_summary: str,
         orders: List[Dict[str, Any]]
     ) -> str:
-        """Build context prompt for trading decision"""
+        """Build context prompt for trading decision with news integration"""
         
         # Format current time
         current_time = datetime.now().isoformat()
+        
+        # Get formatted news if news_analyzer is available
+        today_hourly_news = "No hourly news available for today."
+        past_7_days_summaries = "No daily summaries available for past 7 days."
+        
+        if self.news_analyzer:
+            try:
+                today_hourly_news = self.news_analyzer.format_today_hourly_news_for_prompt()
+                past_7_days_summaries = self.news_analyzer.format_past_n_days_summaries_for_prompt(7)
+                self.logger.info("Successfully retrieved formatted news data")
+            except Exception as e:
+                self.logger.warning(f"Failed to retrieve news data: {e}")
         
         # Format market data
         prices_json = json.dumps({
@@ -240,43 +259,80 @@ Before generating trading recommendations, you MUST:
         # Format unavailable symbols
         unavailable_str = ", ".join(unavailable_symbols) if unavailable_symbols else "None"
         
-        # Build prompt
+        # Build prompt in nof1.ai style with news integration
         prompt = f"""**CONTEXT UPDATE**:
 
 **Current Time**: {current_time}
 
-**Current Positions**:
-{positions_json}
+═══════════════════════════════════════════════════════════════
+SECTION 1: NEWS CONTEXT
+═══════════════════════════════════════════════════════════════
+
+Before analyzing technical data, review the latest news developments that may be driving market movements.
+
+───────────────────────────────────────────────────────────────
+1A. TODAY'S HOURLY NEWS UPDATES
+───────────────────────────────────────────────────────────────
+
+{today_hourly_news}
+
+───────────────────────────────────────────────────────────────
+1B. PAST 7 DAYS DAILY NEWS SUMMARIES
+───────────────────────────────────────────────────────────────
+
+{past_7_days_summaries}
+
+═══════════════════════════════════════════════════════════════
+SECTION 2: MARKET DATA
+═══════════════════════════════════════════════════════════════
 
 **Latest Prices**:
 {prices_json}
 
-**Recent News/Events** (last 24h):
-{news_summary if news_summary else "No specific news provided. Use general market knowledge."}
-
 **Unavailable Symbols** (skip these):
 {unavailable_str}
+
+═══════════════════════════════════════════════════════════════
+SECTION 3: ACCOUNT INFORMATION
+═══════════════════════════════════════════════════════════════
+
+**Current Positions**:
+{positions_json}
 
 **Previous Orders**:
 {orders_json}
 
----
+═══════════════════════════════════════════════════════════════
+SECTION 4: YOUR TRADING DECISION
+═══════════════════════════════════════════════════════════════
 
-**INSTRUCTIONS**:
+Based on the comprehensive information above (NEWS + MARKET DATA + POSITIONS):
 
-1. Review the current portfolio state and market conditions
-2. Analyze recent news/events and their impact on the 6 allowed symbols
-3. Decide whether to:
-   - Open new positions
-   - Adjust existing positions
-   - Close positions
-   - Wait and monitor
+STEP 1: NEWS UPDATE CHECK
+1. Has any new news emerged since your last decision?
+2. Does any new news contradict your current positions?
+3. Are there new catalysts that create opportunities?
 
-4. For existing positions:
-   - Consider trailing stop-loss adjustments
-   - Evaluate partial profit-taking opportunities
+STEP 2: POSITION REVIEW
+4. How are your current positions performing relative to your thesis?
+5. Is the market reacting to news as expected?
+6. Should you hold, adjust stop-loss/take-profit, or close positions?
 
-5. Output the JSON format as specified in the system prompt
+STEP 3: NEW OPPORTUNITIES
+7. Are there new opportunities based on updated news or technicals?
+8. Which coins have the clearest setup now?
+
+STEP 4: RISK MANAGEMENT
+9. What are the key risks (technical and news-based) to monitor?
+10. Should position sizes be adjusted based on new information?
+
+STEP 5: OUTPUT
+Please provide your trading decisions in the required JSON format, ensuring:
+- "market_view" section highlights any new developments from news
+- "candidates" array includes actions for both existing and new positions
+- "rationale" explains how news + market data support each decision
+
+CRITICAL: Always check for news updates first, then analyze how the market is reacting.
 
 **CONSTRAINTS**:
 - Only trade: XRP, DOGE, BTC, ETH, SOL, BNB

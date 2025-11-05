@@ -1,192 +1,56 @@
-# Changelog
+# 更新日志 (Changelog)
 
-All notable changes to the AITrading project will be documented in this file.
+## [v2.0.0] - 2025-11-05
 
-## [Unreleased] - 2025-11-03
+### ✨ 新增功能
 
-### Added
+#### 📰 新闻集成系统
+- **新增**: `src/news/news_analyzer.py` - 新闻分析器模块
+- **新增**: `src/news/news_storage.py` - 新闻存储模块
+- **新增**: 双重时间框架新闻分析
+  - 今日每小时新闻更新
+  - 过去7天每日新闻摘要
+- **新增**: 事件驱动交易决策能力
 
-#### Trading Symbol Whitelist
-- **BREAKING**: Limited trading to 6 allowed symbols only: `XRP`, `DOGE`, `BTC`, `ETH`, `SOL`, `BNB`
-- Added `src/utils/constants.py` with `ALLOWED_SYMBOLS` constant
-- Implemented symbol whitelist validation in all trading modules
-- Added support for both LONG and SHORT directions on all symbols
+#### 🤖 AI决策增强
+- **更新**: `src/ai/deepseek_trading_agent.py` - 集成新闻分析
+- **优化**: Trading prompt结构,采用nof1.ai风格
+- **新增**: 4-section prompt设计:
+  - Section 1: NEWS CONTEXT
+  - Section 2: MARKET DATA
+  - Section 3: ACCOUNT INFORMATION
+  - Section 4: YOUR TRADING DECISION
+- **新增**: 5步决策框架
 
-#### Error Handling & Fault Tolerance
-- Added `get_available_symbols()` method to filter available symbols from whitelist
-- Added `get_price_safe()` method with comprehensive error handling
-- Added `get_market_data_for_symbols()` method that skips unavailable symbols instead of failing
-- Implemented automatic skip for symbols with:
-  - No price data available
-  - Invalid price (None, 0, negative)
-  - Contract not available on Hyperliquid
-- Added structured logging events:
-  - `skip_unavailable_symbol` - when a symbol is skipped
-  - `price_fetch_failed` - when price fetching fails
-  - `contract_unavailable` - when contract is not available
+### 📚 文档更新
+- **更新**: `README.md` - 添加新闻集成功能说明
+- **新增**: `NEWS_INTEGRATION_GUIDE.md` - 详细使用指南
+- **新增**: `CHANGELOG.md` - 本文档
 
-#### DeepSeek Prompt System (nof1.ai Style)
-- Created `prompts/deepseek_trading.md` with comprehensive prompt templates
-- Implemented `DeepseekTradingAgent` class with:
-  - Orchestrator system prompt for task initialization
-  - Per-cycle trading decision prompts
-  - Context caching for historical decisions (last 5 decisions)
-  - Structured JSON output format
-  - Market view with news signals and on-chain/off-chain analysis
-- Added JSON response parsing with markdown code block handling
-- Added trading plan validation:
-  - Filters disallowed symbols
-  - Filters unavailable symbols
-  - Validates directions (LONG/SHORT only)
-  - Validates position sizes (0-1 range)
+### 🛠️ 技术改进
+- **优化**: Prompt token效率,新闻内容约3000 tokens
+- **新增**: 新闻数据持久化存储
+- **新增**: 格式化方法用于prompt注入
+- **改进**: 错误处理和fallback机制
 
-#### Testing
-- Added `tests/test_symbol_filtering.py` with 12 unit tests:
-  - Symbol whitelist validation
-  - Price fetching with error handling
-  - Available symbols filtering
-  - Market data collection with skip logic
-- Added `tests/test_json_schema.py` with JSON schema validation:
-  - Trading plan structure validation
-  - Symbol enum validation
-  - Direction enum validation (LONG/SHORT)
-  - Position size range validation
-  - Required fields validation
-- Added `jsonschema>=4.0.0` dependency
-
-### Changed
-
-#### Configuration
-- Updated `config/config.yaml`:
-  - Changed `trading_pairs` from 10 coins to 6 allowed symbols
-  - Updated `temperature` from 0.7 to 1.0 (recommended for data analysis per Deepseek docs)
-  - Increased `max_leverage` from 5 to 20 (removed artificial limit, use system risk controls)
-  - Added comments explaining whitelist enforcement
-
-#### Market Data Module
-- Modified `src/data/market_data.py`:
-  - Added `allowed_symbols` instance variable
-  - Imported constants from `src/utils/constants.py`
-  - Added 3 new methods with fault tolerance
-  - Enhanced logging with structured events
-
-#### AI Agent
-- Created new `src/ai/deepseek_trading_agent.py` (recommended over old `deepseek_agent.py`):
-  - Implements nof1.ai-style prompt system
-  - Supports context caching
-  - Outputs structured JSON
-  - Validates all trading decisions
-  - Handles both LONG and SHORT directions
-
-### Technical Details
-
-#### Symbol Filtering Flow
-```
-1. Load ALLOWED_SYMBOLS constant
-2. Fetch all market prices from Hyperliquid
-3. Filter symbols:
-   - Must be in ALLOWED_SYMBOLS
-   - Must have valid price (not None, >0)
-   - Must be available on exchange
-4. Log skipped symbols with reason
-5. Continue processing available symbols only
-```
-
-#### DeepSeek Prompt Flow
-```
-1. Initialize with Orchestrator prompt (system message)
-2. Build context with:
-   - Current positions
-   - Latest prices
-   - Recent news/events
-   - Unavailable symbols list
-3. Add historical context (last 5 decisions)
-4. Call Deepseek API
-5. Parse JSON response
-6. Validate trading plan:
-   - Filter disallowed symbols
-   - Filter unavailable symbols
-   - Validate directions
-7. Cache decision in context history
-8. Return validated trading plan
-```
-
-#### Logging Events
-- `skip_unavailable_symbol={SYMBOL}` - Symbol skipped due to unavailability
-- `price_fetch_failed={SYMBOL}` - Failed to fetch price for symbol
-- `contract_unavailable={SYMBOL}` - Contract not available on Hyperliquid
-- `symbol_not_allowed={SYMBOL}` - Symbol not in whitelist
-
-### Migration Guide
-
-#### For Existing Users
-
-1. **Update Configuration**:
-   ```yaml
-   trading:
-     trading_pairs:
-       - "XRP"
-       - "DOGE"
-       - "BTC"
-       - "ETH"
-       - "SOL"
-       - "BNB"
-   
-   deepseek:
-     temperature: 1.0  # Changed from 0.7
-   
-   risk:
-     max_leverage: 20  # Changed from 5
-   ```
-
-2. **Update Code**:
-   - Replace `deepseek_agent.py` imports with `deepseek_trading_agent.py`
-   - Use `get_market_data_for_symbols()` instead of manual iteration
-   - Handle unavailable symbols gracefully (no need to check, automatic)
-
-3. **Run Tests**:
-   ```bash
-   pip install jsonschema
-   python -m pytest tests/test_symbol_filtering.py
-   python -m pytest tests/test_json_schema.py
-   ```
-
-### Breaking Changes
-
-- **Trading symbols limited to 6**: Any code assuming other symbols will fail
-- **New AI agent interface**: `DeepseekTradingAgent` has different method signatures
-- **JSON output format**: Trading plans now use structured JSON schema
-
-### Verification Checklist
-
-- [x] Only XRP/DOGE/BTC/ETH/SOL/BNB can be traded
-- [x] Unavailable symbols are skipped with warning logs
-- [x] System continues when some symbols fail
-- [x] Both LONG and SHORT directions supported
-- [x] DeepSeek receives orchestrator prompt at start
-- [x] DeepSeek outputs valid JSON
-- [x] Trading plan includes news/events analysis
-- [x] Unit tests for symbol filtering
-- [x] JSON schema validation tests
-- [x] Leverage limit removed (uses system defaults)
-
-### References
-
-- nof1.ai Alpha Arena: https://nof1.ai/
-- Deepseek API Docs: https://api-docs.deepseek.com/
-- Deepseek Temperature Settings: Use 1.0 for data analysis/trading
-- Hyperliquid Docs: https://hyperliquid.gitbook.io/
+### 🧹 代码清理
+- **删除**: 所有测试文件和临时文件
+- **优化**: 项目结构更清晰
 
 ---
 
-## [1.0.0] - 2025-10-30
+## [v1.0.0] - 2025-10-30
 
-### Added
-- Initial release of AITrading system
-- Basic Deepseek integration
-- HyperLiquid API integration
-- Risk management module
-- Trading execution module
-- Configuration system
-- Logging system
-- Basic documentation
+### 初始版本
+- 基础AI交易系统
+- Deepseek集成
+- HyperLiquid交易所对接
+- 技术指标分析
+- 风险管理系统
+- 纸上交易和实盘模式
+
+---
+
+**版本说明**:
+- v2.0.0: 新闻集成重大更新
+- v1.0.0: 初始发布版本
