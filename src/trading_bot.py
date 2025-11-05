@@ -9,6 +9,7 @@ from .utils.logger import get_logger
 from .utils.config_loader import get_config
 from .data.market_data import MarketDataCollector, MarketDataCache
 from .data.indicators import TechnicalIndicators
+from .data.enhanced_market_data import EnhancedMarketDataCollector
 from .trading.executor import TradeExecutor
 from .risk.risk_manager import RiskManager
 from .ai.deepseek_agent import DeepseekAgent
@@ -51,6 +52,7 @@ class TradingBot:
             ttl=self.config.get('data.cache_expiry', 300)
         )
         self.indicators = TechnicalIndicators()
+        self.enhanced_market_data = EnhancedMarketDataCollector(self.market_data)
         self.executor = TradeExecutor(
             config=self.config.get_section('hyperliquid'),
             paper_trading=self.config.get('trading.mode') == 'paper'
@@ -153,7 +155,7 @@ class TradingBot:
             
             # Get trading plan for all symbols in one AI call
             trading_plan = self.ai_agent.generate_trading_plan(
-                market_data=all_market_data['prices'],
+                market_data=all_market_data['market_data'],
                 current_positions=self.positions,
                 unavailable_symbols=all_market_data['unavailable'],
                 news_summary="",
@@ -435,37 +437,35 @@ class TradingBot:
     
     def _collect_all_market_data(self) -> Dict[str, Any]:
         """
-        Collect market data for all trading pairs in one go
+        Collect comprehensive market data for all trading pairs
+        including technical indicators, OI, funding rates
         
         Returns:
-            Dictionary with 'prices' and 'unavailable' keys
+            Dictionary with 'market_data' and 'unavailable' keys
         """
-        all_prices = {}
+        all_market_data = {}
         unavailable = []
         
         for coin in self.trading_pairs:
             try:
-                # Get current price
-                current_price = self.market_data.get_current_price(coin)
+                # Get comprehensive market data with technical indicators
+                coin_data = self.enhanced_market_data.get_comprehensive_market_data(coin)
                 
-                if current_price and current_price > 0:
-                    all_prices[coin] = {
-                        'price': current_price,
-                        'timestamp': datetime.now().isoformat()
-                    }
-                    self.logger.debug(f"{coin}: ${current_price:,.2f}")
+                if coin_data.get('available'):
+                    all_market_data[coin] = coin_data
+                    self.logger.debug(f"{coin}: ${coin_data.get('current_price', 0):,.2f}")
                 else:
                     unavailable.append(coin)
-                    self.logger.warning(f"{coin}: No valid price data")
+                    self.logger.warning(f"{coin}: {coin_data.get('error', 'Data not available')}")
                     
             except Exception as e:
-                self.logger.error(f"Error getting price for {coin}: {e}")
+                self.logger.error(f"Error getting data for {coin}: {e}")
                 unavailable.append(coin)
         
-        self.logger.info(f"Collected data for {len(all_prices)} symbols, {len(unavailable)} unavailable")
+        self.logger.info(f"Collected data for {len(all_market_data)} symbols, {len(unavailable)} unavailable")
         
         return {
-            'prices': all_prices,
+            'market_data': all_market_data,
             'unavailable': unavailable
         }
     

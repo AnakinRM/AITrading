@@ -56,6 +56,9 @@ class DeepseekTradingAgent:
         # News analyzer for news integration
         self.news_analyzer = news_analyzer
         
+        # Allowed trading symbols
+        self.allowed_symbols = ALLOWED_SYMBOLS
+        
         # Dialog log file for debugging
         project_root = Path(__file__).parent.parent.parent
         self.dialog_log_path = project_root / "logs" / "ai_dialogs.log"
@@ -250,23 +253,24 @@ Before generating trading recommendations, you MUST:
             except Exception as e:
                 self.logger.warning(f"Failed to retrieve news data: {e}")
         
-        # Format market data
-        prices_json = json.dumps({
-            symbol: {
-                "price": data.get("price"),
-                "timestamp": data.get("timestamp")
-            }
-            for symbol, data in market_data.items()
-        }, indent=2)
+        # Import EnhancedMarketDataCollector for formatting
+        from ..data.enhanced_market_data import EnhancedMarketDataCollector
         
-        # Format positions
-        positions_json = json.dumps(current_positions, indent=2) if current_positions else "{}"
+        # Format market data with detailed technical indicators
+        market_data_sections = []
+        for symbol in self.allowed_symbols:
+            if symbol in market_data:
+                formatted = EnhancedMarketDataCollector(None).format_market_data_for_prompt(market_data[symbol])
+                market_data_sections.append(formatted)
         
-        # Format orders
-        orders_json = json.dumps(orders, indent=2) if orders else "[]"
+        market_data_text = "\n".join(market_data_sections)
         
         # Format unavailable symbols
         unavailable_str = ", ".join(unavailable_symbols) if unavailable_symbols else "None"
+        
+        # Format positions and orders
+        positions_text = str(current_positions) if current_positions else "No current positions"
+        orders_text = str(orders) if orders else "No previous orders"
         
         # Build prompt in nof1.ai style with news integration
         prompt = f"""**CONTEXT UPDATE**:
@@ -295,21 +299,21 @@ Before analyzing technical data, review the latest news developments that may be
 SECTION 2: MARKET DATA
 ═══════════════════════════════════════════════════════════════
 
-**Latest Prices**:
-{prices_json}
+CURRENT MARKET STATE FOR ALL COINS
 
-**Unavailable Symbols** (skip these):
-{unavailable_str}
+{market_data_text}
+
+**Unavailable Symbols** (skip these): {unavailable_str}
 
 ═══════════════════════════════════════════════════════════════
 SECTION 3: ACCOUNT INFORMATION
 ═══════════════════════════════════════════════════════════════
 
-**Current Positions**:
-{positions_json}
+HERE IS YOUR ACCOUNT INFORMATION & PERFORMANCE
 
-**Previous Orders**:
-{orders_json}
+{positions_text}
+
+{orders_text}
 
 ═══════════════════════════════════════════════════════════════
 SECTION 4: YOUR TRADING DECISION
