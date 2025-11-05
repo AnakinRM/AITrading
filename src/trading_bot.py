@@ -12,6 +12,8 @@ from .data.indicators import TechnicalIndicators
 from .trading.executor import TradeExecutor
 from .risk.risk_manager import RiskManager
 from .ai.deepseek_agent import DeepseekAgent
+from .ai.deepseek_trading_agent import DeepseekTradingAgent
+from .news.news_analyzer import NewsAnalyzer
 from .strategy.ai_strategy import AITradingStrategy
 
 
@@ -56,8 +58,24 @@ class TradingBot:
         self.risk_manager = RiskManager(
             self.config.get_section('risk')
         )
-        self.ai_agent = DeepseekAgent(
-            self.config.get_section('deepseek')
+        
+        # Initialize news analyzer if enabled
+        news_config = self.config.get_section('news')
+        news_analyzer = None
+        if news_config.get('enabled', True):
+            try:
+                news_analyzer = NewsAnalyzer(
+                    api_key=self.config.get('deepseek.api_key'),
+                    storage_dir=news_config.get('news_data_dir', 'news_data')
+                )
+                self.logger.info("News integration enabled")
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize news analyzer: {e}")
+        
+        # Use new DeepseekTradingAgent with news integration
+        self.ai_agent = DeepseekTradingAgent(
+            config=self.config.get_section('deepseek'),
+            news_analyzer=news_analyzer
         )
         self.strategy = AITradingStrategy(
             market_data=self.market_data,

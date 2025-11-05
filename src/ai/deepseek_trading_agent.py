@@ -468,3 +468,96 @@ CRITICAL: Always check for news updates first, then analyze how the market is re
             },
             "next_actions": ["wait", "retry_ai_analysis"]
         }
+
+    def analyze_market(
+        self,
+        coin: str,
+        market_data: Dict[str, Any],
+        technical_indicators: Dict[str, Any],
+        current_position: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Analyze market for a single coin (compatibility method for AITradingStrategy)
+        
+        This method provides backward compatibility with the old DeepseekAgent interface
+        while using the new trading plan generation system with news integration.
+        
+        Args:
+            coin: Symbol to analyze
+            market_data: Market data for the coin
+            technical_indicators: Technical indicators
+            current_position: Current position if any
+            
+        Returns:
+            Trading decision dictionary compatible with old interface
+        """
+        try:
+            # Build market data dict for generate_trading_plan
+            full_market_data = {
+                coin: {
+                    "price": market_data.get('price', 0),
+                    "timestamp": datetime.now().isoformat(),
+                    "volume": market_data.get('volume', 0),
+                    **technical_indicators
+                }
+            }
+            
+            # Build current positions dict
+            positions = {}
+            if current_position:
+                positions[coin] = current_position
+            
+            # Generate trading plan using new system
+            trading_plan = self.generate_trading_plan(
+                market_data=full_market_data,
+                current_positions=positions,
+                unavailable_symbols=[],
+                news_summary="",
+                orders=[]
+            )
+            
+            # Extract decision for this coin from trading plan
+            candidates = trading_plan.get('candidates', [])
+            
+            # Find candidate for this coin
+            coin_candidate = None
+            for candidate in candidates:
+                if candidate.get('symbol') == coin:
+                    coin_candidate = candidate
+                    break
+            
+            # Convert to old format
+            if coin_candidate:
+                direction = coin_candidate.get('direction', 'LONG')
+                entry = coin_candidate.get('entry', {})
+                position_info = coin_candidate.get('position', {})
+                
+                return {
+                    'action': 'buy' if direction == 'LONG' else 'sell',
+                    'confidence': 0.8,  # Default confidence
+                    'entry_price': entry.get('price', market_data.get('price', 0)),
+                    'stop_loss': coin_candidate.get('stop_loss', 0),
+                    'take_profit': coin_candidate.get('take_profit', 0),
+                    'size': position_info.get('size_pct', 0.1),
+                    'leverage': position_info.get('leverage_hint', 3),
+                    'reason': coin_candidate.get('rationale', 'AI analysis'),
+                    'risk_notes': coin_candidate.get('risk_notes', [])
+                }
+            else:
+                # No candidate for this coin, return hold
+                market_view = trading_plan.get('market_view', {})
+                return {
+                    'action': 'hold',
+                    'confidence': 0.5,
+                    'reason': market_view.get('summary', 'No clear trading opportunity identified'),
+                    'risk_notes': []
+                }
+                
+        except Exception as e:
+            self.logger.error(f"Error in analyze_market for {coin}: {e}", exc_info=True)
+            return {
+                'action': 'hold',
+                'confidence': 0.0,
+                'reason': f'Error: {str(e)}',
+                'risk_notes': []
+            }
