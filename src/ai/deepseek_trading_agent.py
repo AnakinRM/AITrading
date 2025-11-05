@@ -4,6 +4,7 @@ Supports structured JSON output for executable trading decisions
 """
 import json
 import os
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from openai import OpenAI
@@ -54,6 +55,11 @@ class DeepseekTradingAgent:
         
         # News analyzer for news integration
         self.news_analyzer = news_analyzer
+        
+        # Dialog log file for debugging
+        project_root = Path(__file__).parent.parent.parent
+        self.dialog_log_path = project_root / "logs" / "ai_dialogs.log"
+        self.dialog_log_path.parent.mkdir(parents=True, exist_ok=True)
         
         self.logger.info(f"DeepseekTradingAgent initialized with model: {self.model}, temperature: {self.temperature}")
         self.logger.info(f"Allowed symbols: {ALLOWED_SYMBOLS}")
@@ -196,6 +202,9 @@ Before generating trading recommendations, you MUST:
             # Parse response
             decision_text = response.choices[0].message.content
             self.logger.debug(f"Raw AI response: {decision_text[:500]}...")
+            
+            # Log dialog for debugging
+            self._log_dialog(context_prompt, decision_text)
             
             # Parse JSON
             trading_plan = self._parse_json_response(decision_text)
@@ -561,3 +570,24 @@ CRITICAL: Always check for news updates first, then analyze how the market is re
                 'reason': f'Error: {str(e)}',
                 'risk_notes': []
             }
+
+    def _log_dialog(self, prompt: str, response_text: str) -> None:
+        """
+        Persist Deepseek prompt/response to the shared log file for debugging
+        
+        Args:
+            prompt: The context prompt sent to AI
+            response_text: The AI's response
+        """
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "model": self.model,
+            "prompt": prompt,
+            "response": response_text,
+        }
+        try:
+            with open(self.dialog_log_path, "a", encoding="utf-8") as log_file:
+                log_file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            self.logger.debug(f"Dialog logged to {self.dialog_log_path}")
+        except Exception as exc:
+            self.logger.error(f"Failed to persist AI dialog: {exc}")
