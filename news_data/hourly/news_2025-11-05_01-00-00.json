@@ -1,0 +1,29 @@
+{
+  "search_time": "2025-11-05 01:00:00",
+  "total_news_found": 1,
+  "market_sentiment_summary": "Bullish - Ethereum upgrade success boosts L2 ecosystem",
+  "key_themes": [
+    "Ethereum scalability",
+    "L2 growth"
+  ],
+  "news_items": [
+    {
+      "category": "Ethereum",
+      "title": "Ethereum Dencun Upgrade Successfully Deployed",
+      "summary": "Proto-danksharding (EIP-4844) live on mainnet. L2 transaction costs reduced 40%. Network activity surges post-upgrade.",
+      "market_impact": "Bullish",
+      "urgency": "Medium",
+      "affected_coins": [
+        "ETH",
+        "L2 tokens"
+      ],
+      "source": "Ethereum Foundation, CoinTelegraph"
+    }
+  ],
+  "trading_implications": "ETH showing strong fundamentals. L2 ecosystem benefits. Consider ETH long positions.",
+  "_metadata": {
+    "saved_at": "2025-11-05T02:20:48.820227",
+    "data_type": "hourly",
+    "timestamp": "2025-11-05T01:00:00"
+  }
+}

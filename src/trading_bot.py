@@ -61,10 +61,10 @@ class TradingBot:
         
         # Initialize news analyzer if enabled
         news_config = self.config.get_section('news')
-        news_analyzer = None
+        self.news_analyzer = None
         if news_config.get('enabled', True):
             try:
-                news_analyzer = NewsAnalyzer(
+                self.news_analyzer = NewsAnalyzer(
                     api_key=self.config.get('deepseek.api_key'),
                     storage_dir=news_config.get('news_data_dir', 'news_data')
                 )
@@ -75,7 +75,7 @@ class TradingBot:
         # Use new DeepseekTradingAgent with news integration
         self.ai_agent = DeepseekTradingAgent(
             config=self.config.get_section('deepseek'),
-            news_analyzer=news_analyzer
+            news_analyzer=self.news_analyzer
         )
         self.strategy = AITradingStrategy(
             market_data=self.market_data,
@@ -105,6 +105,9 @@ class TradingBot:
         """Start the trading bot"""
         self.logger.info("Starting trading bot...")
         self.is_running = True
+        
+        # Fetch news from the past hour before starting
+        self._fetch_startup_news()
         
         try:
             while self.is_running:
@@ -382,6 +385,53 @@ class TradingBot:
             # win_rate = wins / len(self.trade_history)
             # self.logger.info(f"Win Rate: {win_rate:.2%}")
             pass
+    
+    def _fetch_startup_news(self):
+        """
+        Fetch news from the past hour at startup
+        """
+        if not self.news_analyzer:
+            self.logger.info("News analyzer not available, skipping startup news fetch")
+            return
+        
+        try:
+            from datetime import datetime, timedelta
+            
+            self.logger.info("=" * 60)
+            self.logger.info("Fetching news from the past hour...")
+            self.logger.info("=" * 60)
+            
+            # Calculate time range (past 1 hour)
+            end_time = datetime.now()
+            start_time = end_time - timedelta(hours=1)
+            
+            self.logger.info(f"Time range: {start_time} to {end_time}")
+            
+            # Fetch hourly news
+            news_items = self.news_analyzer.storage.get_hourly_news_range(start_time, end_time)
+            
+            if news_items:
+                self.logger.info(f"✅ Found {len(news_items)} news items from the past hour")
+                for item in news_items:
+                    self.logger.info(f"  - [{item.get('timestamp')}] {item.get('summary', 'N/A')[:80]}...")
+            else:
+                self.logger.info("ℹ️  No news found in the past hour")
+                self.logger.info("💡 Tip: Run news collection script to populate news data")
+            
+            # Also check daily summaries
+            today = datetime.now().date()
+            daily_summary = self.news_analyzer.storage.get_daily_summary(today)
+            
+            if daily_summary:
+                self.logger.info(f"✅ Found today's daily summary")
+                self.logger.info(f"  Key themes: {', '.join(daily_summary.get('key_themes', [])[:3])}")
+            else:
+                self.logger.info("ℹ️  No daily summary for today yet")
+            
+            self.logger.info("=" * 60)
+            
+        except Exception as e:
+            self.logger.error(f"Error fetching startup news: {e}", exc_info=True)
     
     def _collect_all_market_data(self) -> Dict[str, Any]:
         """

@@ -1,0 +1,45 @@
+{
+  "date": "2025-11-05",
+  "summary": "Crypto markets rally on Fed dovish signals and strong ETF inflows. Ethereum upgrade boosts L2 ecosystem. Overall bullish sentiment across major assets.",
+  "key_themes": [
+    "Fed rate cut expectations",
+    "Institutional BTC accumulation",
+    "Ethereum scalability improvements"
+  ],
+  "market_sentiment": "bullish",
+  "total_news_analyzed": 3,
+  "top_news": [
+    {
+      "headline": "Fed signals dovish pivot",
+      "impact": "bullish",
+      "category": "macro",
+      "affected_coins": [
+        "BTC",
+        "ETH",
+        "All"
+      ]
+    },
+    {
+      "headline": "Record BTC ETF inflows",
+      "impact": "bullish",
+      "category": "bitcoin",
+      "affected_coins": [
+        "BTC"
+      ]
+    },
+    {
+      "headline": "Ethereum Dencun upgrade success",
+      "impact": "bullish",
+      "category": "ethereum",
+      "affected_coins": [
+        "ETH"
+      ]
+    }
+  ],
+  "trading_recommendations": "Strong buy signals for BTC and ETH. Consider increasing long exposure across major assets.",
+  "_metadata": {
+    "saved_at": "2025-11-05T02:20:48.820390",
+    "data_type": "daily",
+    "date": "2025-11-05"
+  }
+}

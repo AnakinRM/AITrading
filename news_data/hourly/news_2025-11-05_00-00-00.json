@@ -1,0 +1,41 @@
+{
+  "search_time": "2025-11-05 00:00:00",
+  "total_news_found": 2,
+  "market_sentiment_summary": "Bullish - Fed dovish signals and strong ETF inflows",
+  "key_themes": [
+    "Fed rate cuts",
+    "Institutional adoption"
+  ],
+  "news_items": [
+    {
+      "category": "Macro",
+      "title": "Federal Reserve Signals Potential Rate Cuts in Q1 2025",
+      "summary": "Fed Chair Powell hints at dovish pivot citing cooling inflation data. Core CPI down to 2.3% YoY. Market expects 25bps cut in March.",
+      "market_impact": "Bullish",
+      "urgency": "High",
+      "affected_coins": [
+        "BTC",
+        "ETH",
+        "All"
+      ],
+      "source": "Bloomberg, Reuters"
+    },
+    {
+      "category": "Bitcoin",
+      "title": "Bitcoin ETF Sees Record $1.2B Inflow",
+      "summary": "BlackRock IBIT leads with $800M single-day inflow. Total BTC ETF AUM surpasses $50B. Institutional allocation increasing.",
+      "market_impact": "Bullish",
+      "urgency": "High",
+      "affected_coins": [
+        "BTC"
+      ],
+      "source": "CoinDesk, The Block"
+    }
+  ],
+  "trading_implications": "Strong bullish signals for BTC and broader crypto market. Consider increasing long exposure.",
+  "_metadata": {
+    "saved_at": "2025-11-05T02:20:48.819897",
+    "data_type": "hourly",
+    "timestamp": "2025-11-05T00:00:00"
+  }
+}
