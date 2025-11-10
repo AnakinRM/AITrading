@@ -2,6 +2,8 @@
 Main trading bot orchestrator
 """
 import time
+import json
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
@@ -16,6 +18,9 @@ from .ai.deepseek_agent import DeepseekAgent
 from .ai.deepseek_trading_agent import DeepseekTradingAgent
 from .news.news_analyzer import NewsAnalyzer
 from .strategy.ai_strategy import AITradingStrategy
+
+EQUITY_LOG_HEADER = "timestamp,capital,unrealized_pnl,realized_pnl,drawdown,num_positions,total_position_value\n"
+JOURNAL_LOG_HEADER = "timestamp,capital,unrealized_pnl,realized_pnl,num_positions,positions,details\n"
 
 
 class TradingBot:
@@ -86,23 +91,154 @@ class TradingBot:
             risk_manager=self.risk_manager,
             config=self.config.get_section('strategy')
         )
+        # Logging paths
+        self.log_dir = Path("logs")
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.ai_dialog_path = self.log_dir / "ai_dialogs.log"
+        self.equity_log_path = self.log_dir / "equity_history.csv"
+        self.journal_path = self.log_dir / "trading_journal.csv"
+        
+        # Clean historical artifacts (logs/news) on startup
+        self._cleanup_historical_data()
         
         # Trading state
         self.trading_pairs = self.config.get('trading.trading_pairs', [])
-        self.trading_interval = self.config.get('trading.trading_interval', 60)
+        self.trading_interval = max(self.config.get('trading.trading_interval', 300), 300)
         self.is_running = False
         self.positions: Dict[str, Dict[str, Any]] = {}
         self.trade_history: List[Dict[str, Any]] = []
+        self.realized_pnl = 0.0
+        self.last_prices: Dict[str, float] = {}
+        if not self.equity_log_path.exists():
+            self.equity_log_path.write_text(EQUITY_LOG_HEADER, encoding="utf-8")
+        if not self.journal_path.exists():
+            self.journal_path.write_text(JOURNAL_LOG_HEADER, encoding="utf-8")
         
         # Initialize capital
         initial_capital = self.config.get('trading.initial_capital', 10000)
+        self.initial_capital_value = initial_capital
         self.risk_manager.initialize_capital(initial_capital)
         
         self.logger.info("Trading Bot initialized successfully")
         self.logger.info(f"Trading pairs: {', '.join(self.trading_pairs)}")
         self.logger.info(f"Trading mode: {self.config.get('trading.mode')}")
         self.logger.info(f"Initial capital: ${initial_capital:,.2f}")
-    
+
+    def _cleanup_historical_data(self) -> None:
+        """Remove stale log/news data on startup."""
+        try:
+            self.ai_dialog_path.write_text("", encoding="utf-8")
+            self.logger.info(f"Cleared historical data: {self.ai_dialog_path}")
+        except Exception as exc:
+            self.logger.warning(f"Failed to reset {self.ai_dialog_path}: {exc}")
+
+        try:
+            self.equity_log_path.write_text(EQUITY_LOG_HEADER, encoding="utf-8")
+            self.logger.info(f"Reset equity log: {self.equity_log_path}")
+        except Exception as exc:
+            self.logger.warning(f"Failed to reset equity log {self.equity_log_path}: {exc}")
+
+        try:
+            self.journal_path.write_text(JOURNAL_LOG_HEADER, encoding="utf-8")
+            self.logger.info(f"Reset trading journal: {self.journal_path}")
+        except Exception as exc:
+            self.logger.warning(f"Failed to reset trading journal {self.journal_path}: {exc}")
+
+    @staticmethod
+    def _extract_price(value: Any, default: float = 0.0) -> float:
+        """Convert price-like values (possibly lists) into float."""
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                try:
+                    return float(item)
+                except (TypeError, ValueError):
+                    continue
+            return float(default)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return float(default)
+
+    def _calculate_portfolio_value(self, prices: Optional[Dict[str, Any]] = None) -> Dict[str, float]:
+        """Compute current equity, splitting realized/unrealized components."""
+        prices = prices or self.last_prices
+        unrealized = 0.0
+        total_position_value = 0.0
+
+        for coin, position in self.positions.items():
+            current_price = self._extract_price(prices.get(coin, position['entry_price']), position['entry_price'])
+            entry_price = position['entry_price']
+            size = position['size']
+            leverage = position.get('leverage', 1)
+            total_position_value += size * current_price
+
+            price_diff = current_price - entry_price
+            if not position.get('is_long', True):
+                price_diff = entry_price - current_price
+            unrealized += price_diff * size * leverage
+
+        capital = self.initial_capital_value + self.realized_pnl + unrealized
+        return {
+            "capital": capital,
+            "unrealized": unrealized,
+            "total_position_value": total_position_value,
+        }
+
+    def _append_equity_log(self, metrics: Dict[str, Any]) -> None:
+        """Write a row to the equity CSV."""
+        try:
+            with open(self.equity_log_path, "a", encoding="utf-8") as fp:
+                fp.write(
+                    f"{datetime.now().isoformat()},"
+                    f"{metrics['capital']},"
+                    f"{metrics['unrealized']},"
+                    f"{self.realized_pnl},"
+                    f"{self.risk_manager.calculate_drawdown()},"
+                    f"{len(self.positions)},"
+                    f"{metrics['total_position_value']}\n"
+                )
+        except Exception as exc:
+            self.logger.error(f"Failed to append equity log: {exc}")
+
+    def _update_equity_metrics(self, prices: Optional[Dict[str, Any]] = None) -> Dict[str, float]:
+        """Refresh risk metrics and persist equity snapshot."""
+        metrics = self._calculate_portfolio_value(prices)
+        self.risk_manager.update_capital(metrics['capital'])
+        self._append_equity_log(metrics)
+        return metrics
+
+    def _positions_snapshot(self) -> Dict[str, Dict[str, Any]]:
+        """Return a simplified snapshot of current positions."""
+        return {
+            coin: {
+                "size": pos.get('size', 0),
+                "entry_price": pos.get('entry_price', 0),
+                "is_long": pos.get('is_long', True),
+                "leverage": pos.get('leverage', 1),
+                "stop_loss": pos.get('stop_loss'),
+                "take_profit": pos.get('take_profit'),
+            }
+            for coin, pos in self.positions.items()
+        }
+
+    def _log_journal(self, event_type: str, details: Dict[str, Any], metrics: Optional[Dict[str, float]] = None) -> None:
+        """Append a structured entry to the trading journal."""
+        if metrics is None:
+            metrics = self._calculate_portfolio_value(self.last_prices)
+        try:
+            with open(self.journal_path, "a", encoding="utf-8") as fp:
+                fp.write(
+                    f"{datetime.now().isoformat()},"
+                    f"{metrics['capital']},"
+                    f"{metrics['unrealized']},"
+                    f"{self.realized_pnl},"
+                    f"{len(self.positions)},"
+                    f"\"{json.dumps(self._positions_snapshot(), ensure_ascii=False)}\","
+                    f"\"{json.dumps(details, ensure_ascii=False)}\"\n"
+                )
+        except Exception as exc:
+            self.logger.warning(f"Failed to log journal entry: {exc}")
+
     def start(self):
         """Start the trading bot"""
         self.logger.info("Starting trading bot...")
@@ -146,12 +282,17 @@ class TradingBot:
             self._update_account_state()
             
             # Check risk limits
-            if not self.risk_manager.trading_enabled:
+            if self.risk_manager.enforce_limits and not self.risk_manager.trading_enabled:
                 self.logger.warning("Trading disabled due to risk limits")
                 return
             
             # Collect market data for all symbols
             all_market_data = self._collect_all_market_data()
+            self.last_prices = {
+                coin: data.get('current_price')
+                for coin, data in all_market_data['market_data'].items()
+                if data.get('current_price') is not None
+            }
             
             # Get trading plan for all symbols in one AI call
             trading_plan = self.ai_agent.generate_trading_plan(
@@ -164,6 +305,8 @@ class TradingBot:
             
             # Execute trading plan
             self._execute_trading_plan(trading_plan)
+            metrics = self._update_equity_metrics(self.last_prices)
+            self._log_journal("ai_plan", trading_plan, metrics)
             
             # Log current state
             self._log_current_state()
@@ -209,10 +352,38 @@ class TradingBot:
         """Execute buy order"""
         try:
             size = decision.get('size', 0)
-            price = decision.get('entry_price', 0)
-            leverage = decision.get('leverage', 3)
-            stop_loss = decision.get('stop_loss', 0)
-            take_profit = decision.get('take_profit', 0)
+            price = self._extract_price(decision.get('entry_price', 0))
+            leverage = decision.get('leverage') or self.risk_manager.default_leverage or 1
+            if not isinstance(leverage, (int, float)) or leverage <= 0:
+                leverage = self.risk_manager.default_leverage or 1
+            stop_loss = self._extract_price(decision.get('stop_loss', 0))
+            take_profit_raw = decision.get('take_profit', 0)
+            take_profit = self._extract_price(take_profit_raw)
+            take_profit_targets = (
+                list(take_profit_raw)
+                if isinstance(take_profit_raw, (list, tuple))
+                else [take_profit]
+            )
+            market_price = self.last_prices.get(coin)
+            if price <= 0 and market_price:
+                self.logger.warning(
+                    f"{coin}: Replacing invalid buy entry price with market price {market_price}"
+                )
+                price = market_price
+            if price <= 0:
+                self.logger.error(
+                    f"{coin}: Cannot execute buy order due to missing price information"
+                )
+                self._log_journal(
+                    "order_error",
+                    {
+                        "coin": coin,
+                        "action": "buy",
+                        "error": "Missing entry price",
+                        "decision": decision,
+                    }
+                )
+                return
             
             # Place order
             result = self.executor.place_order(
@@ -242,6 +413,7 @@ class TradingBot:
                     'leverage': leverage,
                     'stop_loss': stop_loss,
                     'take_profit': take_profit,
+                    'take_profit_targets': take_profit_targets,
                     'entry_time': datetime.now()
                 }
                 
@@ -249,8 +421,30 @@ class TradingBot:
                     f"BUY order executed: {coin} {size} @ ${price:.2f} "
                     f"(leverage: {leverage}x, SL: ${stop_loss:.2f}, TP: ${take_profit:.2f})"
                 )
+                self._log_journal(
+                    "order_fill",
+                    {
+                        "coin": coin,
+                        "action": "buy",
+                        "size": size,
+                        "entry_price": price,
+                        "leverage": leverage,
+                        "stop_loss": stop_loss,
+                        "take_profit_targets": take_profit_targets,
+                        "reason": decision.get('reason'),
+                    }
+                )
             else:
                 self.logger.error(f"BUY order failed: {result.get('error', 'Unknown error')}")
+                self._log_journal(
+                    "order_error",
+                    {
+                        "coin": coin,
+                        "action": "buy",
+                        "error": result.get('error', 'Unknown error'),
+                        "decision": decision,
+                    }
+                )
                 
         except Exception as e:
             self.logger.error(f"Error executing buy order: {e}")
@@ -259,10 +453,38 @@ class TradingBot:
         """Execute sell order"""
         try:
             size = decision.get('size', 0)
-            price = decision.get('entry_price', 0)
-            leverage = decision.get('leverage', 3)
-            stop_loss = decision.get('stop_loss', 0)
-            take_profit = decision.get('take_profit', 0)
+            price = self._extract_price(decision.get('entry_price', 0))
+            leverage = decision.get('leverage') or self.risk_manager.default_leverage or 1
+            if not isinstance(leverage, (int, float)) or leverage <= 0:
+                leverage = self.risk_manager.default_leverage or 1
+            stop_loss = self._extract_price(decision.get('stop_loss', 0))
+            take_profit_raw = decision.get('take_profit', 0)
+            take_profit = self._extract_price(take_profit_raw)
+            take_profit_targets = (
+                list(take_profit_raw)
+                if isinstance(take_profit_raw, (list, tuple))
+                else [take_profit]
+            )
+            market_price = self.last_prices.get(coin)
+            if price <= 0 and market_price:
+                self.logger.warning(
+                    f"{coin}: Replacing invalid sell entry price with market price {market_price}"
+                )
+                price = market_price
+            if price <= 0:
+                self.logger.error(
+                    f"{coin}: Cannot execute sell order due to missing price information"
+                )
+                self._log_journal(
+                    "order_error",
+                    {
+                        "coin": coin,
+                        "action": "sell",
+                        "error": "Missing entry price",
+                        "decision": decision,
+                    }
+                )
+                return
             
             # Place order
             result = self.executor.place_order(
@@ -292,6 +514,7 @@ class TradingBot:
                     'leverage': leverage,
                     'stop_loss': stop_loss,
                     'take_profit': take_profit,
+                    'take_profit_targets': take_profit_targets,
                     'entry_time': datetime.now()
                 }
                 
@@ -299,8 +522,30 @@ class TradingBot:
                     f"SELL order executed: {coin} {size} @ ${price:.2f} "
                     f"(leverage: {leverage}x, SL: ${stop_loss:.2f}, TP: ${take_profit:.2f})"
                 )
+                self._log_journal(
+                    "order_fill",
+                    {
+                        "coin": coin,
+                        "action": "sell",
+                        "size": size,
+                        "entry_price": price,
+                        "leverage": leverage,
+                        "stop_loss": stop_loss,
+                        "take_profit_targets": take_profit_targets,
+                        "reason": decision.get('reason'),
+                    }
+                )
             else:
                 self.logger.error(f"SELL order failed: {result.get('error', 'Unknown error')}")
+                self._log_journal(
+                    "order_error",
+                    {
+                        "coin": coin,
+                        "action": "sell",
+                        "error": result.get('error', 'Unknown error'),
+                        "decision": decision,
+                    }
+                )
                 
         except Exception as e:
             self.logger.error(f"Error executing sell order: {e}")
@@ -312,6 +557,7 @@ class TradingBot:
                 return
             
             position = self.positions[coin]
+            exit_price = self._extract_price(self.last_prices.get(coin, position['entry_price']), position['entry_price'])
             
             # Place opposite order to close
             result = self.executor.place_order(
@@ -323,6 +569,16 @@ class TradingBot:
             )
             
             if result.get('status') == 'ok':
+                # Calculate PnL
+                entry_price = position['entry_price']
+                size = position['size']
+                leverage = position.get('leverage', 1)
+                price_diff = exit_price - entry_price
+                if not position['is_long']:
+                    price_diff = entry_price - exit_price
+                pnl = price_diff * size * leverage
+                self.realized_pnl += pnl
+
                 # Remove from tracking
                 self.risk_manager.remove_position(coin)
                 del self.positions[coin]
@@ -333,14 +589,34 @@ class TradingBot:
                     'entry_time': position['entry_time'],
                     'exit_time': datetime.now(),
                     'entry_price': position['entry_price'],
+                    'exit_price': exit_price,
                     'size': position['size'],
                     'is_long': position['is_long'],
+                    'pnl': pnl,
                     'reason': decision.get('reason', 'N/A')
                 })
                 
                 self.logger.info(f"Position closed: {coin} - {decision.get('reason', 'N/A')}")
+                self._log_journal(
+                    "order_close",
+                    {
+                        "coin": coin,
+                        "exit_price": exit_price,
+                        "pnl": pnl,
+                        "reason": decision.get('reason'),
+                    }
+                )
             else:
                 self.logger.error(f"Close order failed: {result.get('error', 'Unknown error')}")
+                self._log_journal(
+                    "order_error",
+                    {
+                        "coin": coin,
+                        "action": "close",
+                        "error": result.get('error', 'Unknown error'),
+                        "decision": decision,
+                    }
+                )
                 
         except Exception as e:
             self.logger.error(f"Error closing position: {e}")
@@ -504,25 +780,77 @@ class TradingBot:
                     continue
                 
                 # Convert to action
-                if direction == 'LONG':
+                direction_upper = str(direction).upper()
+                if direction_upper == 'LONG':
                     action = 'buy'
-                elif direction == 'SHORT':
+                elif direction_upper == 'SHORT':
                     action = 'sell'
+                elif direction_upper.startswith('HOLD'):
+                    self.logger.info(f"{symbol}: HOLD signal ({direction_upper}), skipping trade execution")
+                    self._log_journal(
+                        "hold_signal",
+                        {
+                            "coin": symbol,
+                            "direction": direction_upper,
+                            "reason": candidate.get('rationale')
+                        }
+                    )
+                    continue
                 else:
-                    self.logger.warning(f"Unknown direction {direction} for {symbol}")
+                    self.logger.warning(f"Unknown direction {direction} for {symbol}, treating as HOLD")
+                    self._log_journal(
+                        "hold_signal",
+                        {
+                            "coin": symbol,
+                            "direction": direction_upper,
+                            "reason": candidate.get('rationale')
+                        }
+                    )
                     continue
                 
                 # Build decision dict compatible with existing execution methods
                 entry = candidate.get('entry', {})
                 position_info = candidate.get('position', {})
+                market_price = self.last_prices.get(symbol)
+                entry_price = self._extract_price(
+                    entry.get('price'),
+                    default=market_price or 0.0,
+                )
+                if entry.get('price') in (None, "", 0) and entry_price:
+                    self.logger.debug(
+                        f"{symbol}: Using market price {entry_price} as fallback entry"
+                    )
+                elif entry_price <= 0:
+                    self.logger.warning(
+                        f"{symbol}: No valid entry price available; skipping candidate"
+                    )
+                    self._log_journal(
+                        "hold_signal",
+                        {
+                            "coin": symbol,
+                            "direction": direction_upper,
+                            "reason": "No valid entry price available",
+                        }
+                    )
+                    continue
                 
+                size_pct = position_info.get('size_pct', 0.1)
+                if not isinstance(size_pct, (int, float)) or size_pct <= 0:
+                    size_pct = 0.1
+                leverage_hint = position_info.get(
+                    'leverage_hint',
+                    self.risk_manager.default_leverage or 1,
+                )
+                if not isinstance(leverage_hint, (int, float)) or leverage_hint <= 0:
+                    leverage_hint = self.risk_manager.default_leverage or 1
+
                 decision = {
                     'action': action,
-                    'entry_price': entry.get('price', 0),
+                    'entry_price': entry_price,
                     'stop_loss': candidate.get('stop_loss', 0),
                     'take_profit': candidate.get('take_profit', 0),
-                    'size': position_info.get('size_pct', 0.1),
-                    'leverage': position_info.get('leverage_hint', 3),
+                    'size': size_pct,
+                    'leverage': leverage_hint,
                     'reason': candidate.get('rationale', 'AI orchestrator decision'),
                     'confidence': 0.8  # Default confidence
                 }

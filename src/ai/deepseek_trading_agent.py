@@ -410,11 +410,13 @@ CRITICAL: Always check for news updates first, then analyze how the market is re
             return plan
         
         validated_candidates = []
+        original_count = len(plan.get('candidates', []))
         
         for candidate in plan.get('candidates', []):
             symbol = candidate.get('symbol')
             direction = candidate.get('direction')
-            
+            direction_upper = str(direction).upper()
+
             # Check symbol is allowed
             if symbol not in ALLOWED_SYMBOLS:
                 self.logger.warning(f"Filtered out non-allowed symbol: {symbol}")
@@ -426,17 +428,22 @@ CRITICAL: Always check for news updates first, then analyze how the market is re
                 continue
             
             # Check direction is valid
-            if direction not in [DIRECTION_LONG, DIRECTION_SHORT]:
+            if direction_upper in [DIRECTION_LONG, DIRECTION_SHORT]:
+                candidate['direction'] = direction_upper
+            elif direction_upper.startswith('HOLD'):
+                candidate['direction'] = direction_upper
+                self.logger.info(f"{symbol}: HOLD signal received ({direction_upper})")
+            else:
                 self.logger.warning(f"Invalid direction {direction} for {symbol}, skipping")
                 continue
-            
+
             validated_candidates.append(candidate)
         
         plan['candidates'] = validated_candidates
         
         self.logger.info(
             f"Validated {len(validated_candidates)} candidates "
-            f"(filtered {len(plan.get('candidates', [])) - len(validated_candidates)})"
+            f"(filtered {original_count - len(validated_candidates)})"
         )
         
         return plan

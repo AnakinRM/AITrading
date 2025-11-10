@@ -1,13 +1,13 @@
-# HyperLiquid AI Trading Bot Configuration
+﻿# HyperLiquid AI Trading Bot Configuration
 
 # HyperLiquid API Configuration
 hyperliquid:
   # API URL (mainnet or testnet)
-  api_url: "https://api.hyperliquid-testnet.xyz"  # 使用测试网进行开发
+  api_url: "https://api.hyperliquid-testnet.xyz"  # 浣跨敤娴嬭瘯缃戣繘琛屽紑鍙?
   # Your wallet address (42-character hexadecimal format)
-  account_address: ""  # 需要填入您的钱包地址
+  account_address: ""  # 闇€瑕佸～鍏ユ偍鐨勯挶鍖呭湴鍧€
   # Your private key (keep this secret!)
-  secret_key: ""  # 需要填入您的私钥
+  secret_key: ""  # 闇€瑕佸～鍏ユ偍鐨勭閽?
   # Use API wallet (optional)
   use_api_wallet: false
 
@@ -16,11 +16,11 @@ deepseek:
   # API URL
   api_url: "https://api.deepseek.com"
   # Your Deepseek API key
-  api_key: "sk-6f2d8f942c9947ae8b6745e7b6ebb577"  # Deepseek API密钥
+  api_key: ""  # Deepseek API瀵嗛挜
   # Model to use
-  model: "deepseek-chat"  # 可选: deepseek-chat, deepseek-reasoner
+  model: "deepseek-chat"  # 鍙€? deepseek-chat, deepseek-reasoner
   # Max tokens for response
-  max_tokens: 4000  # 增加到4000以容纳新闻内容
+  max_tokens: 4000  # 澧炲姞鍒?000浠ュ绾虫柊闂诲唴瀹?
   # Temperature (0-2) - 1.0 recommended for data analysis
   temperature: 1.0
 
@@ -37,13 +37,13 @@ trading:
     - "BNB"
   
   # Trading mode
-  mode: "paper"  # paper: 模拟交易, live: 实盘交易
+  mode: "paper"  # paper: 妯℃嫙浜ゆ槗, live: 瀹炵洏浜ゆ槗
   
   # Initial capital (for paper trading)
   initial_capital: 10000  # USD
   
   # Trading interval (seconds)
-  trading_interval: 60  # 每60秒执行一次交易决策
+  trading_interval: 300  # 姣?0绉掓墽琛屼竴娆′氦鏄撳喅绛?
   
   # Order types
   default_order_type: "limit"  # limit, market
@@ -148,3 +148,4 @@ monitoring:
   # Alert thresholds
   alert_on_error: true
   alert_on_drawdown: true
+

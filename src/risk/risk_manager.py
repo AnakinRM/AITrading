@@ -35,6 +35,7 @@ class RiskManager:
         self.take_profit_pct = config.get('take_profit_pct', 0.10)
         self.max_drawdown = config.get('max_drawdown', 0.20)
         self.max_daily_loss = config.get('max_daily_loss', 0.10)
+        self.enforce_limits = config.get('enforce_limits', True)
         
         # State tracking
         self.initial_capital = 0
@@ -67,6 +68,10 @@ class RiskManager:
             capital: Current capital amount
         """
         self.current_capital = capital
+        
+        if not self.enforce_limits:
+            self.trading_enabled = True
+            return
         
         # Update peak capital
         if capital > self.peak_capital:
@@ -104,6 +109,9 @@ class RiskManager:
         Returns:
             True if within limit, False if exceeded
         """
+        if not self.enforce_limits:
+            return True
+        
         # Reset daily PnL if new day
         now = datetime.now()
         if now >= self.daily_reset_time + timedelta(days=1):
@@ -223,6 +231,9 @@ class RiskManager:
         # Check if trading is enabled
         if not self.trading_enabled:
             return False, "Trading is currently disabled due to risk limits"
+        
+        if not self.enforce_limits:
+            return True, "Risk checks disabled"
         
         # Check leverage
         if self.max_leverage != float('inf') and leverage > self.max_leverage:

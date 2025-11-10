@@ -427,6 +427,8 @@ TOP IMPORTANT NEWS:
         result = []
         
         for i, hour_data in enumerate(today_news, 1):
+            if not isinstance(hour_data, dict):
+                continue
             hour_text = f"""Hour {i}: {hour_data.get('search_time', 'Unknown')}
 Total News: {hour_data.get('total_news_found', 0)}
 Market Sentiment: {hour_data.get('market_sentiment_summary', 'N/A')}
@@ -468,6 +470,8 @@ News Items:"""
         result = []
         
         for i, day_data in enumerate(summaries, 1):
+            if not isinstance(day_data, dict):
+                continue
             metadata = day_data.get('_metadata', {})
             date = metadata.get('date', 'Unknown')
             
